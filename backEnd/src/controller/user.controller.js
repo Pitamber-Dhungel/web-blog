@@ -1,0 +1,64 @@
+const User = require("../models/user.model");
+const handleError = require("../helper/handleError");
+const bcryptjs = require("bcryptjs");
+const cloudinary=require("../config/cloudinary.config")
+
+const getUser = async (req, res, next) => {
+  try {
+    const { userid } = req.params;
+
+    const user = await User.findOne({ _id: userid }).lean().exec();
+
+    if (!user) {
+      return next(handleError(404, "User not found."));
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "User data found.",
+      user,
+    });
+  } catch (error) {
+    return next(handleError(500, error.message));
+  }
+};
+const updateUser = async (req, res, next) => {
+  try {
+    const data = JSON.parse(req.body.data);
+    const { userid } = req.params;
+
+    const user = await User.findById(userid);
+    user.name = data.name;
+    user.email = data.email;
+    user.bio = data.bio;
+    if (data.password && data.password.length > 8) {
+      const hashedPassword = bcryptjs.hashSync(data.password);
+      user.password = hashedPassword;
+    }
+    if (req.file) {
+      // Upload an image
+      const uploadResult = await cloudinary.uploader
+        .upload(req.file.path, {
+          foler: "pitamber-web-blog",
+          resource_type: "auto",
+        })
+        .catch((error) => {
+          next(handleError(500, error.message));
+        });
+      user.avatar = uploadResult.secure_url;
+    }
+
+    await user.save();
+    const newUser = user.toObject({ getters: true });
+    delete newUser.password;
+    res.status(200).json({
+      success: true,
+      message: "User data found.",
+      user: newUser,
+    });
+  } catch (error) {
+    return next(handleError(500, error.message));
+  }
+};
+
+module.exports = { getUser, updateUser };
